@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 interface WebSearchResultProps {
   isLoading: boolean;
   results: string;
+  isStreaming?: boolean;
 }
 
 export const WebSearchResult = ({ isLoading, results }: WebSearchResultProps) => {
@@ -77,17 +78,46 @@ export const WebSearchResult = ({ isLoading, results }: WebSearchResultProps) =>
 
 // Simple markdown formatting function
 function formatMarkdown(markdown: string): string {
+  // Handle empty input
+  if (!markdown) return '';
+  
+  // Extract reference URLs ([1]: https://example.com)
+  const referenceLinks: {[key: string]: string} = {};
+  const referenceRegex = /\[(\d+)\]: (https?:\/\/[^\s]+)/g;
+  let match;
+  
+  while ((match = referenceRegex.exec(markdown)) !== null) {
+    referenceLinks[match[1]] = match[2];
+  }
+  
   let html = markdown
     // Headers
     .replace(/^# (.*$)/gm, '<h1 class="text-xl font-bold mt-4 mb-2">$1</h1>')
     .replace(/^## (.*$)/gm, '<h2 class="text-lg font-bold mt-3 mb-1">$1</h2>')
-    // Links
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/gm, '<a href="$2" class="text-blue-600 hover:underline" target="_blank">$1</a>')
+    
+    // Links - standard markdown links [text](url)
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/gm, '<a href="$2" class="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">$1</a>')
+    
+    // Citation links [1], [2], etc. - use actual URLs when available
+    .replace(/\[(\d+)\](?!\:)/g, (match, num) => {
+      const url = referenceLinks[num];
+      if (url) {
+        return `<a href="${url}" class="text-blue-600 hover:underline font-medium" target="_blank" rel="noopener noreferrer">[${num}]</a>`;
+      }
+      return `<span class="text-blue-600 font-medium">[${num}]</span>`;
+    })
+    
     // Lists
     .replace(/^\d+\. (.*$)/gm, '<li class="ml-4">$1</li>')
     .replace(/^- (.*$)/gm, '<li class="ml-4">$1</li>')
+    
+    // Format reference links as actual links
+    .replace(/\[(\d+)\]: (https?:\/\/[^\s]+)/g, 
+      '<div class="citation"><span class="text-blue-600 font-medium">[⁠$1]:</span> ' + 
+      '<a href="$2" class="text-blue-600 hover:underline break-all" target="_blank" rel="noopener noreferrer">$2</a></div>')
+    
     // Paragraphs
-    .replace(/^(?!<[hl])(.+)/gm, '<p class="mb-2">$1</p>');
+    .replace(/^(?!<[hdl])(.+)/gm, '<p class="mb-2">$1</p>');
 
   return html;
 } 

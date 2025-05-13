@@ -67,7 +67,7 @@ class ChatRequest(BaseModel):
     messages: List[Message]
     model: Optional[str] = "gpt-4o"
     temperature: Optional[float] = 0.7
-    max_tokens: Optional[int] = 1000
+    max_tokens: Optional[int] = 2000
     stream: Optional[bool] = False
     web_search: Optional[bool] = False
 
@@ -92,15 +92,23 @@ async def perplexity_search(query: str) -> str:
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are a helpful assistant that searches the web for accurate information. Provide detailed, well-reasoned answers with citations to sources."
+                    "content": """You are a helpful research assistant. Cite sources using [number](url) markdown. When citing information, use BOTH approaches together: 
+1. Use numbered references in square brackets like [1], [2], etc. 
+2. ALSO make the first mention of each source a clickable link using markdown format. For example: '[Salesforce Press Release](https://example.com)'. 
+This ensures the information is both properly cited AND immediately accessible. 
+At the end of your message, include the corresponding URLs for each citation in this exact format: 
+[1]: https://example.com 
+[2]: https://another-example.com 
+Always include one URL per line. This ensures all citations are properly clickable. 
+Do not use footnote-style citations like [^1^]."""
                 },
                 {
                     "role": "user",
-                    "content": query
+                    "content": f"Search: {query}\nReturn relevant links and a summary."
                 }
             ],
             "temperature": 0.3,  # Lower temperature for more focused reasoning
-            "max_tokens": 800,    # Increased token limit for more detailed analysis
+            "max_tokens": 2000,   # Significantly increased token limit for more detailed results
             "presence_penalty": 0.1 # Slight penalty to prevent repetition
             # Removed frequency_penalty as it conflicts with presence_penalty
         }
@@ -196,16 +204,59 @@ async def chat(request: ChatRequest):
         if request.web_search and last_user_message:
             print(f"Perplexity search enabled for query: {last_user_message}")
             search_results = await perplexity_search(last_user_message)
-            print("Search results obtained")
+            print("Search results obtained", search_results)
         
         # Convert our Pydantic models to dict for OpenAI
         messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
         
         # Add search results as a system message if available
-        if search_results:
+        if not request.stream and search_results and isinstance(search_results, str):
+            print(search_results)
             messages.insert(0, {
                 "role": "system",
-                "content": f"Use the following Perplexity search results to help answer the user's query:\n\n{search_results}\n\nIncorporate this information into your response, and mention that the information comes from Perplexity Sonar Pro search."
+                "content": f"""Use the following Perplexity search results to answer the user's query:
+
+{search_results}
+
+You are a helpful AI assistant with access to web search results. 
+If search results are provided, you MUST use them to provide the most accurate and up-to-date information. 
+When citing information, use BOTH approaches together: 
+1. Use numbered references in square brackets like [1], [2], etc. 
+2. ALSO make the first mention of each source a clickable link using markdown format. For example: '[Salesforce Press Release](https://example.com)'. 
+This ensures the information is both properly cited AND immediately accessible. 
+At the end of your message, include the corresponding URLs for each citation in this exact format: 
+[1]: https://example.com 
+[2]: https://another-example.com 
+Always include one URL per line. This ensures all citations are properly clickable. 
+Do not use footnote-style citations like [^1^]. 
+If search results don't contain the answer, clearly state that and provide your best knowledge.
+Always mention that information comes from Perplexity Sonar Pro search.
+If information appears outdated, acknowledge that in your response.
+"""
+            })
+        # For streaming mode, just give instructions since search results will be streamed separately
+        elif request.stream and request.web_search:
+            messages.insert(0, {
+                "role": "system",
+                "content": f"""Use the following Perplexity search results to answer the user's query:
+
+{search_results}
+
+You are a helpful AI assistant with access to web search results. 
+If search results are provided, you MUST use them to provide the most accurate and up-to-date information. 
+When citing information, use BOTH approaches together: 
+1. Use numbered references in square brackets like [1], [2], etc. 
+2. ALSO make the first mention of each source a clickable link using markdown format. For example: '[Salesforce Press Release](https://example.com)'. 
+This ensures the information is both properly cited AND immediately accessible. 
+At the end of your message, include the corresponding URLs for each citation in this exact format: 
+[1]: https://example.com 
+[2]: https://another-example.com 
+Always include one URL per line. This ensures all citations are properly clickable. 
+Do not use footnote-style citations like [^1^]. 
+If search results don't contain the answer, clearly state that and provide your best knowledge.
+Always mention that information comes from Perplexity Sonar Pro search.
+If information appears outdated, acknowledge that in your response.
+"""
             })
         
         print(f"Sending messages to OpenAI: {len(messages)} messages")

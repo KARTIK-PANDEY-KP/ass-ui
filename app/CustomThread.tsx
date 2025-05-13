@@ -37,7 +37,8 @@ export const CustomThread = () => {
     }
   };
 
-  const isRunning = thread.status === "running";
+  // Use type assertion to fix the TypeScript error
+  const isRunning = (thread as any).status === "running";
   const messages = thread.messages || [];
 
   return (
@@ -45,11 +46,11 @@ export const CustomThread = () => {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-2">
         <div className="space-y-2">
-          {messages.map((message: Message) => {
+          {messages.map((message: any) => {
             // Extract text content
             const content = message.content
-              .filter((item) => item.type === "text")
-              .map((item) => item.text || "")
+              .filter((item: {type: string}) => item.type === "text")
+              .map((item: {text?: string}) => item.text || "")
               .join("\n");
 
             return (
